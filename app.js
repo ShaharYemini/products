@@ -1,12 +1,7 @@
 /**
  * app.js — Projects Site
  * Works on index.html (grid) and download.html (detail).
- *
- * GitHub repo structure:
- *   <PROJECTS_FOLDER>/
- *     <subfolder-name>/
- *       description.txt   ← metadata (see format below)
- *       <any-file>        ← downloadable file (for type=download)
+ * Configuration is in config.js — edit that file only.
  *
  * description.txt format:
  *   Line 1: תיאור קצר
@@ -20,13 +15,14 @@
   "use strict";
 
   /* ═══════════════════════════════════════════
-     הגדרות — ערוך כאן בלבד
+     קריאת הגדרות מ-config.js
      ═══════════════════════════════════════════ */
-  const USER     = "ShaharYemini";
-  const REPO     = "downloads";
-  const FOLDER   = "downloads";
-  const TITLE    = "ארכיון פיתוח";
-  const TAGLINE  = "שלום! לפניכם מאגר הפרויקטים שהתאפשר לי להנגיש לכולם בצורת אתר אינטרנט או תוכנה. מוזמנים להשתמש בשמחה, אשמח לשמוע תגובות!";
+  if (typeof SITE_CONFIG === "undefined") {
+    console.error("config.js לא נטען. ודא שה-<script src='config.js'> מופיע לפני app.js");
+  }
+  const { USER, REPO, FOLDER, TITLE, TAGLINE, EMAIL } = (typeof SITE_CONFIG !== "undefined")
+    ? SITE_CONFIG
+    : { USER: "", REPO: "", FOLDER: "downloads", TITLE: "Projects", TAGLINE: "", EMAIL: "" };
 
   const RAW_BASE = `https://raw.githubusercontent.com/${USER}/${REPO}/main`;
   const API_BASE = `https://api.github.com/repos/${USER}/${REPO}/contents`;
@@ -54,7 +50,7 @@
 
   /* ─── Branding ─── */
   function applyBranding() {
-    document.title = isDetailPage() ? `${TITLE}` : `${TITLE} — מאגר`;
+    document.title = isDetailPage() ? `${TITLE}` : `${TITLE} — פרויקטים`;
 
     const titleEl = $("site-title");
     if (titleEl && !isDetailPage()) titleEl.textContent = TITLE;
@@ -66,6 +62,18 @@
     const footerCopy = $("footer-copy");
     if (footerCopy) {
       footerCopy.innerHTML = `© ${new Date().getFullYear()} ${TITLE}`;
+    }
+    const footerEmail = $("footer-email");
+    if (footerEmail) {
+      if (EMAIL) {
+        footerEmail.href  = `mailto:${EMAIL}`;
+        footerEmail.title = EMAIL;
+        footerEmail.textContent = EMAIL;
+      } else {
+        footerEmail.style.display = "none";
+        const sep = footerEmail.previousElementSibling;
+        if (sep) sep.style.display = "none";
+      }
     }
   }
 
@@ -134,14 +142,21 @@
         folders.map(async folder => {
           try {
             const contents = await fetchJSON(`${API_BASE}/${FOLDER}/${folder.name}`);
-            const descFile = contents.find(f => f.type === "file" && f.name.toLowerCase() === "description.txt");
-            const dlFile   = contents.find(f => f.type === "file" && f.name.toLowerCase() !== "description.txt");
+            const descFile    = contents.find(f => f.type === "file" && f.name.toLowerCase() === "description.txt");
+            const previewFile = contents.find(f => f.type === "file" && /^preview\.(png|jpe?g|webp|gif)$/i.test(f.name));
+            const dlFile      = contents.find(f => f.type === "file"
+              && f.name.toLowerCase() !== "description.txt"
+              && !/^preview\.(png|jpe?g|webp|gif)$/i.test(f.name));
 
             let meta = { desc: "אין תיאור זמין.", linkUrl: "", type: "download", imageUrl: "", imageCapt: "" };
             if (descFile) {
               const raw = await fetch(descFile.download_url);
               meta = parseDesc(await raw.text());
             }
+
+            /* תמונת preview — מה-description או מהקובץ בתיקייה */
+            const imageUrl  = meta.imageUrl  || (previewFile ? previewFile.download_url : "");
+            const imageCapt = meta.imageCapt || "";
 
             /* תאריך עדכון אחרון — commit API */
             let updatedAt = null;
@@ -157,8 +172,8 @@
               desc:        meta.desc,
               linkUrl:     meta.linkUrl,
               type:        meta.type,
-              imageUrl:    meta.imageUrl,
-              imageCapt:   meta.imageCapt,
+              imageUrl,
+              imageCapt,
               file:        dlFile ? dlFile.name : null,
               fileSize:    dlFile ? dlFile.size : null,
               updatedAt,
@@ -177,15 +192,12 @@
         card.style.animationDelay = `${0.05 * i}s`;
 
         const arrowSvg = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2.5 9.5L9.5 2.5M9.5 2.5H4M9.5 2.5V8"/></svg>`;
-        const ghSvg    = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>`;
 
         const tagLabel = item.type === "web"
           ? (item.updatedAt ? `עודכן ${formatDate(item.updatedAt)}` : "")
           : (item.file
               ? `${fileExt(item.file)} · ${formatBytes(item.fileSize)}${item.updatedAt ? ` · עודכן ${formatDate(item.updatedAt)}` : ""}`
               : "");
-
-        const repoLabel = item.type === "web" ? "בקר באתר" : "קוד מקור";
 
         card.innerHTML = `
           ${item.imageUrl ? `<img class="card-image" src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" loading="lazy" onerror="this.style.display='none'">` : ""}
@@ -194,10 +206,7 @@
             <span class="card-arrow">${arrowSvg}</span>
           </div>
           <p class="card-desc">${escapeHtml(item.desc)}</p>
-          <div class="card-footer">
-            ${tagLabel ? `<span class="card-tag">${tagLabel}</span>` : "<span></span>"}
-            ${item.linkUrl ? `<a class="card-repo-link" href="${escapeHtml(item.linkUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ghSvg}${repoLabel}</a>` : ""}
-          </div>
+          ${tagLabel ? `<div class="card-footer"><span class="card-tag">${tagLabel}</span></div>` : ""}
         `;
 
         card.addEventListener("click", () => {
@@ -259,7 +268,9 @@
 
       /* Get file info */
       if (!resolvedFile) {
-        const dlFile = contents.find(f => f.type === "file" && f.name.toLowerCase() !== "description.txt");
+        const dlFile = contents.find(f => f.type === "file"
+          && f.name.toLowerCase() !== "description.txt"
+          && !/^preview\.(png|jpe?g|webp|gif)$/i.test(f.name));
         if (!dlFile && type === "download") throw new Error("לא נמצא קובץ בתיקייה זו.");
         if (dlFile) { resolvedFile = dlFile.name; fileSize = dlFile.size; }
       } else {
@@ -277,20 +288,22 @@
         } catch { /* non-critical */ }
       }
 
-      /* Get image + caption from description.txt if not passed via params */
+      /* Get image + caption + linkUrl — params → description.txt → preview file */
       let imageUrl  = params.get("imageUrl")  || "";
       let imageCapt = params.get("imageCapt") || "";
-      if (!imageUrl) {
-        try {
-          const descFile = contents.find(f => f.type === "file" && f.name.toLowerCase() === "description.txt");
-          if (descFile) {
-            const raw = await fetch(descFile.download_url);
-            const meta = parseDesc(await raw.text());
-            imageUrl  = meta.imageUrl;
-            imageCapt = meta.imageCapt;
-          }
-        } catch { /* non-critical */ }
-      }
+      let resolvedLinkUrl = linkUrl;
+      try {
+        const descFile    = contents.find(f => f.type === "file" && f.name.toLowerCase() === "description.txt");
+        const previewFile = contents.find(f => f.type === "file" && /^preview\.(png|jpe?g|webp|gif)$/i.test(f.name));
+        if (descFile) {
+          const raw = await fetch(descFile.download_url);
+          const meta = parseDesc(await raw.text());
+          if (!imageUrl)  imageUrl  = meta.imageUrl;
+          if (!imageCapt) imageCapt = meta.imageCapt;
+          if (!resolvedLinkUrl) resolvedLinkUrl = meta.linkUrl;
+        }
+        if (!imageUrl && previewFile) imageUrl = previewFile.download_url;
+      } catch { /* non-critical */ }
 
       document.title = `${folder} — ${TITLE}`;
       $("detail-name").textContent = folder;
@@ -323,11 +336,11 @@
         if (visitCard) {
           show(visitCard);
           const visitBtn = $("visit-btn");
-          if (visitBtn && linkUrl) visitBtn.href = linkUrl;
+          if (visitBtn && resolvedLinkUrl) visitBtn.href = resolvedLinkUrl;
           /* הצג URL + תאריך עדכון */
           const urlDisplay = $("site-url-display");
           if (urlDisplay) {
-            try { urlDisplay.textContent = new URL(linkUrl).hostname; } catch { urlDisplay.textContent = linkUrl; }
+            try { urlDisplay.textContent = new URL(resolvedLinkUrl).hostname; } catch { urlDisplay.textContent = resolvedLinkUrl; }
           }
           const updEl = $("file-updated");
           if (updEl) updEl.textContent = updatedAt ? `עודכן ${formatDate(updatedAt)}` : "";
@@ -364,7 +377,7 @@
 
         const repoLinkEl = $("repo-source-link");
         if (repoLinkEl) {
-          if (linkUrl) { repoLinkEl.href = linkUrl; show(repoLinkEl); }
+          if (resolvedLinkUrl) { repoLinkEl.href = resolvedLinkUrl; show(repoLinkEl); }
           else hide(repoLinkEl);
         }
       }
