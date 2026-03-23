@@ -1,4 +1,3 @@
 משחק חמוד שיצרתי לפני שנים כשלמדתי לתכנת :)
 download
-https://github.com/ShaharYemini/Paint-By-
-Number
+https://github.com/ShaharYemini/Paint-By-Number
